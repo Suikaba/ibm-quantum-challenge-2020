@@ -36,13 +36,14 @@ def inner_diffusion(qc, perm, aux):
     qc.h(perm)
 
 # create permutations by grover search
+iter_cnt1 = 2 # 2 is best
 def create_perm(qc, perm, oracle, aux):
-    for i in range(2):
+    for i in range(iter_cnt1):
         inner_phase_oracle(qc, perm, oracle, aux)
         inner_diffusion(qc, perm, aux)
 
 def inv_create_perm(qc, perm, oracle, aux):
-    for i in range(2):
+    for i in range(iter_cnt1):
         inner_diffusion(qc, perm, aux)
         inner_phase_oracle(qc, perm, oracle, aux)
 
@@ -74,18 +75,18 @@ def is_count4(qc, xs, out, aux):
     qc.mct(s, out, aux[2:], mode='basic')
     qc.x(s[1])
     qc.x(s[0])
+    #for i in reversed(range(5)):
+    #    inv_adder3(qc, s, xs[i + 1], aux[2:])
+
+def inv_is_count4(qc, xs, out, aux):
+    s = [xs[0], aux[0], aux[1]]
+    qc.x(s[0])
+    qc.x(s[1])
+    qc.mct(s, out, aux[2:], mode='basic')
+    qc.x(s[1])
+    qc.x(s[0])
     for i in reversed(range(5)):
         inv_adder3(qc, s, xs[i + 1], aux[2:])
-
-#def inv_is_count4(qc, xs, out, aux):
-#    s = [xs[0], aux[0], aux[1]]
-#    qc.x(s[0])
-#    qc.x(s[1])
-#    qc.mct(s, out, aux[2:], mode='basic')
-#    qc.x(s[1])
-#    qc.x(s[0])
-#    for i in reversed(range(5)):
-#        inv_adder3(qc, s, xs[i + 1], aux[2:])
 
 # addr == 1
 def check_one_board(qc, addr, perm, oracle, aux, stars):
@@ -115,8 +116,8 @@ def check_one_board(qc, addr, perm, oracle, aux, stars):
 
     proc()
     is_count4(qc, workspace, aux2[0], aux2[1:])
-    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[1:], mode='basic')
-    is_count4(qc, workspace, aux2[0], aux2[1:])
+    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[3:], mode='basic') # aux2[1:3] is dirty by is_count4
+    inv_is_count4(qc, workspace, aux2[0], aux2[1:])
     proc()
 
 # memo: gray_code
@@ -184,7 +185,7 @@ def week3_ans_func(problem_set):
     solution = ClassicalRegister(4)
     #solution = ClassicalRegister(8) # perm
     #solution = ClassicalRegister(3) # adder
-    #solution = ClassicalRegister(5) # is_count4
+    #solution = ClassicalRegister(5) # is_count4, inv_is_count4
     #solution = ClassicalRegister(9) # check_one_board
     #solution = ClassicalRegister(12) # oracle
     qc = QuantumCircuit(address, perm, oracle, aux, solution)
@@ -221,6 +222,13 @@ def week3_ans_func(problem_set):
     # test is_count4 -----------------------------------------------------------
     #qc.h(perm[0:4])
     #is_count4(qc, perm[0:6], oracle[0], aux)
+    #qc.measure(perm[0:4], solution[0:4])
+    #qc.measure(oracle[0], solution[4])
+
+    # test inv_is_count4 -------------------------------------------------------
+    #qc.h(perm[0:4])
+    #is_count4(qc, perm[0:6], oracle[0], aux)
+    #inv_is_count4(qc, perm[0:6], oracle[0], aux)
     #qc.measure(perm[0:4], solution[0:4])
     #qc.measure(oracle[0], solution[4])
 
