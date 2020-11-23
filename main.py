@@ -48,72 +48,62 @@ def inv_create_perm(qc, perm, oracle, aux):
         inner_phase_oracle(qc, perm, oracle, aux)
 
 
-def adder3(qc, s, x, c):
-    qc.rccx(x, s[0], c[0])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[0], s[1])
-    qc.rccx(x, s[0], c[0])
+def adder2(qc, s, x, c):
+    qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
     qc.cx(x, s[0])
 
 # after call, c become dirty bit
-def adder3_dirty(qc, s, x, c):
-    qc.rccx(x, s[0], c[0])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    #qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[0], s[1])
-    #qc.rccx(x, s[0], c[0])
-    qc.cx(x, s[0])
+def adder2_dirty(qc, s, x, c):
+    pass
 
-def inv_adder3(qc, s, x, c):
+def inv_adder2(qc, s, x, c):
     qc.cx(x, s[0])
-    qc.rccx(x, s[0], c[0])
-    qc.cx(c[0], s[1])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    qc.rccx(c[0], s[1], c[1])
-    qc.rccx(x, s[0], c[0])
+    qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
 
-def inv_adder3_dirty(qc, s, x, c):
-    qc.cx(x, s[0])
-    #qc.rccx(x, s[0], c[0])
-    qc.cx(c[0], s[1])
-    #qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    qc.rccx(c[0], s[1], c[1])
-    qc.rccx(x, s[0], c[0])
+def inv_adder2_dirty(qc, s, x, c):
+    pass
 
 def is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 4
+    assert len(dirty) >= 3
     assert len(aux) >= 1
-    s = [xs[0], dirty[0], dirty[1]]
-    adder3(qc, s, xs[1], dirty[2:])
-    adder3(qc, s, xs[2], dirty[2:])
-    adder3(qc, s, xs[3], dirty[2:])
-    adder3(qc, s, xs[4], dirty[2:])
-    adder3_dirty(qc, s, xs[5], dirty[2:])
+    qc.x(xs[0:3])
+    qc.mct(xs[0:3], dirty[0], aux[0], mode='basic')
+    qc.x(dirty[0]) # xs[0:3] に少なくとも 1 が 1 つある
+    qc.x(xs[0:3])
+    s = [xs[0], dirty[1]]
+    adder2(qc, s, xs[1], dirty[2])
+    adder2(qc, s, xs[2], dirty[2])
+    adder2(qc, s, xs[3], dirty[2])
+    adder2(qc, s, xs[4], dirty[2])
+    adder2(qc, s, xs[5], dirty[2])
     qc.x(s[0])
     qc.x(s[1])
-    qc.mct(s, out, aux[0:], mode='basic')
+    qc.mct([dirty[0], s[0], s[1]], out, aux[0], mode='basic')
     qc.x(s[1])
     qc.x(s[0])
 
 def inv_is_count4(qc, xs, out, dirty, aux):
     assert len(dirty) >= 4
     assert len(aux) >= 1
-    s = [xs[0], dirty[0], dirty[1]]
+    s = [xs[0], dirty[1]]
     qc.x(s[0])
     qc.x(s[1])
-    qc.mct(s, out, aux[0:], mode='basic')
+    qc.mct([dirty[0], s[0], s[1]], out, aux[0], mode='basic')
     qc.x(s[1])
     qc.x(s[0])
-    inv_adder3_dirty(qc, s, xs[5], dirty[2:])
-    inv_adder3(qc, s, xs[4], dirty[2:])
-    inv_adder3(qc, s, xs[3], dirty[2:])
-    inv_adder3(qc, s, xs[2], dirty[2:])
-    inv_adder3(qc, s, xs[1], dirty[2:])
+    inv_adder2(qc, s, xs[5], dirty[2])
+    inv_adder2(qc, s, xs[4], dirty[2])
+    inv_adder2(qc, s, xs[3], dirty[2])
+    inv_adder2(qc, s, xs[2], dirty[2])
+    inv_adder2(qc, s, xs[1], dirty[2])
+    qc.x(xs[0:3])
+    qc.x(dirty[0])
+    qc.mct(xs[0:3], dirty[0], aux[0], mode='basic')
+    qc.x(xs[0:3])
 
 # addr == 1
 def check_one_board(qc, addr, perm, oracle, aux, stars):
@@ -212,7 +202,7 @@ def week3_ans_func(problem_set):
     aux = QuantumRegister(15)
     solution = ClassicalRegister(4)
     #solution = ClassicalRegister(8) # perm
-    #solution = ClassicalRegister(3) # adder
+    #solution = ClassicalRegister(2) # adder
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
     #solution = ClassicalRegister(9) # check_one_board
     #solution = ClassicalRegister(12) # oracle
@@ -243,13 +233,13 @@ def week3_ans_func(problem_set):
 
     # test adder3 --------------------------------------------------------------
     #qc.h(aux[0:2])
-    #qc.x(aux[3])
-    #adder3(qc, aux[0:3], aux[3], aux[4:])
-    #qc.measure(aux[0:3], solution)
+    #qc.x(aux[2])
+    #adder2(qc, aux[0:2], aux[2], aux[3])
+    #qc.measure(aux[0:2], solution[0:2])
 
     # test is_count4 -----------------------------------------------------------
     #qc.h(perm[0:4])
-    #is_count4(qc, perm[0:6], oracle[0], aux)
+    #is_count4(qc, perm[0:6], oracle[0], aux[0:4], aux[4:])
     #qc.measure(perm[0:4], solution[0:4])
     #qc.measure(oracle[0], solution[4])
 
