@@ -6,25 +6,43 @@ def qor(qc, a, b, c):
     qc.x(a)
     qc.x(b)
 
+
 def inner_phase_oracle(qc, perm, oracle, aux):
-    def check_one(i, j, out):
+    # A, B, C, D
+    # A, B, C, D+C     (2 -> 3)
+    # A, B, C+B, D+C   (1 -> 2)
+    # A, B+A, C+B, D+C (0 -> 1)
+    # A, B+A, C+B, D+B (2 -> 3)
+    # A, B+A, C+A, D+B (1 -> 2)
+    # A, B+A, C+A, D+A (1 -> 3)
+    def add_and_check(i, j, out):
         qc.cx(perm[i*2], perm[j*2])
         qc.cx(perm[i*2+1], perm[j*2+1])
         qor(qc, perm[j*2], perm[j*2+1], out)
-        qc.cx(perm[i*2], perm[j*2])
+    def inv_add_and_check(i, j, out):
+        qor(qc, perm[j*2], perm[j*2+1], out)
         qc.cx(perm[i*2+1], perm[j*2+1])
+        qc.cx(perm[i*2], perm[j*2])
 
+    workspace = aux[0:6]
     def check_all():
-        workspace = aux[0:6]
-        itr = 0
-        for i in range(4):
-            for j in range(i + 1, 4):
-                check_one(i, j, workspace[itr])
-                itr += 1
+        add_and_check(2, 3, workspace[0])
+        add_and_check(1, 2, workspace[1])
+        add_and_check(0, 1, workspace[2])
+        add_and_check(2, 3, workspace[3])
+        add_and_check(1, 2, workspace[4])
+        add_and_check(1, 3, workspace[5])
+    def inv_check_all():
+        inv_add_and_check(1, 3, workspace[5])
+        inv_add_and_check(1, 2, workspace[4])
+        inv_add_and_check(2, 3, workspace[3])
+        inv_add_and_check(0, 1, workspace[2])
+        inv_add_and_check(1, 2, workspace[1])
+        inv_add_and_check(2, 3, workspace[0])
 
     check_all()
-    qc.mct(aux[0:6], oracle, aux[6:], mode='basic')
-    check_all()
+    qc.mct(workspace, oracle, aux[6:], mode='basic')
+    inv_check_all()
 
 def inner_diffusion(qc, perm, aux):
     qc.h(perm)
