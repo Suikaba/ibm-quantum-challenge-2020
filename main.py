@@ -74,7 +74,10 @@ def adder2(qc, s, x, c):
 
 # after call, c become dirty bit
 def adder2_dirty(qc, s, x, c):
-    pass
+    qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    #qc.rccx(x, s[0], c)
+    qc.cx(x, s[0])
 
 def inv_adder2(qc, s, x, c):
     qc.cx(x, s[0])
@@ -83,44 +86,45 @@ def inv_adder2(qc, s, x, c):
     qc.rccx(x, s[0], c)
 
 def inv_adder2_dirty(qc, s, x, c):
-    pass
+    qc.cx(x, s[0])
+    #qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
 
 def is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 3
-    assert len(aux) >= 1
+    assert len(dirty) >= 5
     qc.x(xs[0:3])
-    qc.mct(xs[0:3], dirty[0], aux[0], mode='basic')
+    qc.mct(xs[0:3], dirty[0], aux, mode='basic')
     qc.x(dirty[0]) # xs[0:3] に少なくとも 1 が 1 つある
     qc.x(xs[0:3])
     s = [xs[0], dirty[1]]
     adder2(qc, s, xs[1], dirty[2])
     adder2(qc, s, xs[2], dirty[2])
-    adder2(qc, s, xs[3], dirty[2])
-    adder2(qc, s, xs[4], dirty[2])
-    adder2(qc, s, xs[5], dirty[2])
+    adder2_dirty(qc, s, xs[3], dirty[2])
+    adder2_dirty(qc, s, xs[4], dirty[3])
+    adder2_dirty(qc, s, xs[5], dirty[4])
     qc.x(s[0])
     qc.x(s[1])
-    qc.mct([dirty[0], s[0], s[1]], out, aux[0], mode='basic')
+    qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
     qc.x(s[1])
     qc.x(s[0])
 
 def inv_is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 4
-    assert len(aux) >= 1
+    assert len(dirty) >= 5
     s = [xs[0], dirty[1]]
     qc.x(s[0])
     qc.x(s[1])
-    qc.mct([dirty[0], s[0], s[1]], out, aux[0], mode='basic')
+    qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
     qc.x(s[1])
     qc.x(s[0])
-    inv_adder2(qc, s, xs[5], dirty[2])
-    inv_adder2(qc, s, xs[4], dirty[2])
-    inv_adder2(qc, s, xs[3], dirty[2])
+    inv_adder2_dirty(qc, s, xs[5], dirty[4])
+    inv_adder2_dirty(qc, s, xs[4], dirty[3])
+    inv_adder2_dirty(qc, s, xs[3], dirty[2])
     inv_adder2(qc, s, xs[2], dirty[2])
     inv_adder2(qc, s, xs[1], dirty[2])
     qc.x(xs[0:3])
     qc.x(dirty[0])
-    qc.mct(xs[0:3], dirty[0], aux[0], mode='basic')
+    qc.mct(xs[0:3], dirty[0], aux, mode='basic')
     qc.x(xs[0:3])
 
 # addr == 1
@@ -151,9 +155,9 @@ def check_one_board(qc, addr, perm, oracle, aux, stars):
                 qc.x(q2)
 
     proc()
-    is_count4(qc, workspace, aux2[0], aux2[1:5], aux2[5:])
-    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[5:], mode='basic')
-    inv_is_count4(qc, workspace, aux2[0],aux2[1:5], aux2[5:])
+    is_count4(qc, workspace, aux2[0], aux2[1:6], aux2[6])
+    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[6:9], mode='basic')
+    inv_is_count4(qc, workspace, aux2[0],aux2[1:6], aux2[6])
     proc()
 
 # memo: gray_code
