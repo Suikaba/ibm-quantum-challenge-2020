@@ -49,22 +49,22 @@ def inv_create_perm(qc, perm, oracle, aux):
 
 
 def adder3(qc, s, x, c):
-    qc.ccx(x, s[0], c[0])
-    qc.ccx(c[0], s[1], c[1])
+    qc.rccx(x, s[0], c[0])
+    qc.rccx(c[0], s[1], c[1])
     qc.cx(c[1], s[2])
-    qc.ccx(c[0], s[1], c[1])
+    qc.rccx(c[0], s[1], c[1])
     qc.cx(c[0], s[1])
-    qc.ccx(x, s[0], c[0])
+    qc.rccx(x, s[0], c[0])
     qc.cx(x, s[0])
 
 def inv_adder3(qc, s, x, c):
     qc.cx(x, s[0])
-    qc.ccx(x, s[0], c[0])
+    qc.rccx(x, s[0], c[0])
     qc.cx(c[0], s[1])
-    qc.ccx(c[0], s[1], c[1])
+    qc.rccx(c[0], s[1], c[1])
     qc.cx(c[1], s[2])
-    qc.ccx(c[0], s[1], c[1])
-    qc.ccx(x, s[0], c[0])
+    qc.rccx(c[0], s[1], c[1])
+    qc.rccx(x, s[0], c[0])
 
 def is_count4(qc, xs, out, aux):
     s = [xs[0], aux[0], aux[1]]
@@ -104,7 +104,7 @@ def check_one_board(qc, addr, perm, oracle, aux, stars):
             elif c == 2:
                 qc.x(q2)
 
-            qc.ccx(q1, q2, workspace[i])
+            qc.rccx(q1, q2, workspace[i])
 
             if c == 0:
                 qc.x(q1)
