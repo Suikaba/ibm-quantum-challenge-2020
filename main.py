@@ -57,6 +57,16 @@ def adder3(qc, s, x, c):
     qc.rccx(x, s[0], c[0])
     qc.cx(x, s[0])
 
+# after call, c become dirty bit
+def adder3_dirty(qc, s, x, c):
+    qc.rccx(x, s[0], c[0])
+    qc.rccx(c[0], s[1], c[1])
+    qc.cx(c[1], s[2])
+    #qc.rccx(c[0], s[1], c[1])
+    qc.cx(c[0], s[1])
+    #qc.rccx(x, s[0], c[0])
+    qc.cx(x, s[0])
+
 def inv_adder3(qc, s, x, c):
     qc.cx(x, s[0])
     qc.rccx(x, s[0], c[0])
@@ -66,32 +76,50 @@ def inv_adder3(qc, s, x, c):
     qc.rccx(c[0], s[1], c[1])
     qc.rccx(x, s[0], c[0])
 
-def is_count4(qc, xs, out, aux):
-    s = [xs[0], aux[0], aux[1]]
-    for i in range(5):
-        adder3(qc, s, xs[i + 1], aux[2:])
-    qc.x(s[0])
-    qc.x(s[1])
-    qc.mct(s, out, aux[2:], mode='basic')
-    qc.x(s[1])
-    qc.x(s[0])
-    #for i in reversed(range(5)):
-    #    inv_adder3(qc, s, xs[i + 1], aux[2:])
+def inv_adder3_dirty(qc, s, x, c):
+    qc.cx(x, s[0])
+    #qc.rccx(x, s[0], c[0])
+    qc.cx(c[0], s[1])
+    #qc.rccx(c[0], s[1], c[1])
+    qc.cx(c[1], s[2])
+    qc.rccx(c[0], s[1], c[1])
+    qc.rccx(x, s[0], c[0])
 
-def inv_is_count4(qc, xs, out, aux):
-    s = [xs[0], aux[0], aux[1]]
+def is_count4(qc, xs, out, dirty, aux):
+    assert len(dirty) >= 4
+    assert len(aux) >= 1
+    s = [xs[0], dirty[0], dirty[1]]
+    adder3(qc, s, xs[1], dirty[2:])
+    adder3(qc, s, xs[2], dirty[2:])
+    adder3(qc, s, xs[3], dirty[2:])
+    adder3(qc, s, xs[4], dirty[2:])
+    adder3_dirty(qc, s, xs[5], dirty[2:])
     qc.x(s[0])
     qc.x(s[1])
-    qc.mct(s, out, aux[2:], mode='basic')
+    qc.mct(s, out, aux[0:], mode='basic')
     qc.x(s[1])
     qc.x(s[0])
-    for i in reversed(range(5)):
-        inv_adder3(qc, s, xs[i + 1], aux[2:])
+
+def inv_is_count4(qc, xs, out, dirty, aux):
+    assert len(dirty) >= 4
+    assert len(aux) >= 1
+    s = [xs[0], dirty[0], dirty[1]]
+    qc.x(s[0])
+    qc.x(s[1])
+    qc.mct(s, out, aux[0:], mode='basic')
+    qc.x(s[1])
+    qc.x(s[0])
+    inv_adder3_dirty(qc, s, xs[5], dirty[2:])
+    inv_adder3(qc, s, xs[4], dirty[2:])
+    inv_adder3(qc, s, xs[3], dirty[2:])
+    inv_adder3(qc, s, xs[2], dirty[2:])
+    inv_adder3(qc, s, xs[1], dirty[2:])
 
 # addr == 1
 def check_one_board(qc, addr, perm, oracle, aux, stars):
+    assert len(aux) >= 15
     workspace = aux[0:6]
-    aux2 = aux[6:]
+    aux2 = aux[6:] # can use 9 aux
     def proc():
         for i in range(6):
             r, c = int(stars[i][0]), int(stars[i][1])
@@ -115,9 +143,9 @@ def check_one_board(qc, addr, perm, oracle, aux, stars):
                 qc.x(q2)
 
     proc()
-    is_count4(qc, workspace, aux2[0], aux2[1:])
-    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[3:], mode='basic') # aux2[1:3] is dirty by is_count4
-    inv_is_count4(qc, workspace, aux2[0], aux2[1:])
+    is_count4(qc, workspace, aux2[0], aux2[1:5], aux2[5:])
+    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[5:], mode='basic')
+    inv_is_count4(qc, workspace, aux2[0],aux2[1:5], aux2[5:])
     proc()
 
 # memo: gray_code
@@ -181,7 +209,7 @@ def week3_ans_func(problem_set):
     address = QuantumRegister(4)
     perm = QuantumRegister(8) # row and col
     oracle = QuantumRegister(1)
-    aux = QuantumRegister(12)
+    aux = QuantumRegister(15)
     solution = ClassicalRegister(4)
     #solution = ClassicalRegister(8) # perm
     #solution = ClassicalRegister(3) # adder
