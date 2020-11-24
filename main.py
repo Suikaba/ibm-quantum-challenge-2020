@@ -1,3 +1,5 @@
+import math
+
 def qor(qc, a, b, c):
     qc.x(a)
     qc.x(b)
@@ -7,14 +9,12 @@ def qor(qc, a, b, c):
     qc.x(b)
 
 
+# create 3 perm
 def inner_phase_oracle(qc, perm, oracle, aux):
-    # A, B, C, D
-    # A, B, C, D+C     (2 -> 3)
-    # A, B, C+B, D+C   (1 -> 2)
-    # A, B+A, C+B, D+C (0 -> 1)
-    # A, B+A, C+B, D+B (2 -> 3)
-    # A, B+A, C+A, D+B (1 -> 2)
-    # A, B+A, C+A, D+A (1 -> 3)
+    # A, B, C
+    # A, B, C+B    (1 -> 2)
+    # A, B+A, C+B  (0 -> 1)
+    # A, B+A, C+A  (1 -> 2)
     def add_and_check(i, j, out):
         qc.cx(perm[i*2], perm[j*2])
         qc.cx(perm[i*2+1], perm[j*2+1])
@@ -24,37 +24,31 @@ def inner_phase_oracle(qc, perm, oracle, aux):
         qc.cx(perm[i*2+1], perm[j*2+1])
         qc.cx(perm[i*2], perm[j*2])
 
-    workspace = aux[0:6]
+    workspace = aux[0:3]
     def check_all():
-        add_and_check(2, 3, workspace[0])
-        add_and_check(1, 2, workspace[1])
-        add_and_check(0, 1, workspace[2])
-        add_and_check(2, 3, workspace[3])
-        add_and_check(1, 2, workspace[4])
-        add_and_check(1, 3, workspace[5])
+        add_and_check(1, 2, workspace[0])
+        add_and_check(0, 1, workspace[1])
+        add_and_check(1, 2, workspace[2])
     def inv_check_all():
-        inv_add_and_check(1, 3, workspace[5])
-        inv_add_and_check(1, 2, workspace[4])
-        inv_add_and_check(2, 3, workspace[3])
-        inv_add_and_check(0, 1, workspace[2])
-        inv_add_and_check(1, 2, workspace[1])
-        inv_add_and_check(2, 3, workspace[0])
+        inv_add_and_check(1, 2, workspace[2])
+        inv_add_and_check(0, 1, workspace[1])
+        inv_add_and_check(1, 2, workspace[0])
 
     check_all()
-    qc.mct(workspace, oracle, aux[6:], mode='basic')
+    qc.mct(workspace, oracle, aux[3:], mode='basic')
     inv_check_all()
 
 def inner_diffusion(qc, perm, aux):
     qc.h(perm)
     qc.x(perm)
-    qc.h(perm[7])
-    qc.mct(perm[0:7], perm[7], aux, mode='basic')
-    qc.h(perm[7])
+    qc.h(perm[5])
+    qc.mct(perm[0:5], perm[5], aux, mode='basic')
+    qc.h(perm[5])
     qc.x(perm)
     qc.h(perm)
 
 # create permutations by grover search
-iter_cnt1 = 2 # 2 is best
+iter_cnt1 = 1 # 2 is best
 def create_perm(qc, perm, oracle, aux):
     for i in range(iter_cnt1):
         inner_phase_oracle(qc, perm, oracle, aux)
@@ -129,28 +123,36 @@ def inv_is_count4(qc, xs, dirty, aux):
 
 # addr == 1
 def store_one_board(qc, addr, data, perm, aux, stars):
-    qc.mct(addr, aux[0], aux[1:], mode='basic')
+    qc.x(aux[0:2])
+    qc.mct(addr, aux[2], aux[3:], mode='basic')
     for i in range(6):
         r, c = int(stars[i][0]), int(stars[i][1])
-        q1, q2 = perm[r*2], perm[r*2+1]
-        if c == 0:
-            qc.x(q1)
-            qc.x(q2)
-        elif c == 1:
-            qc.x(q1)
-        elif c == 2:
-            qc.x(q2)
+        for j in range(4):
+            if r == j:
+                q1, q2 = aux[0], aux[1]
+            elif r < j:
+                q1, q1 = perm[r*2], perm[r*2+1]
+            else:
+                q1, q2 = perm[(r-1)*2], perm[(r-1)*2+1]
+            if c == 0:
+                qc.x(q1)
+                qc.x(q2)
+            elif c == 1:
+                qc.x(q1)
+            elif c == 2:
+                qc.x(q2)
 
-        qc.mct([aux[0], q1, q2], data[i], aux[1:], mode='basic')
+            qc.mct([aux[2], q1, q2], data[i], aux[3:], mode='basic')
 
-        if c == 0:
-            qc.x(q1)
-            qc.x(q2)
-        elif c == 1:
-            qc.x(q1)
-        elif c == 2:
-            qc.x(q2)
-    qc.mct(addr, aux[0], aux[1:], mode='basic')
+            if c == 0:
+                qc.x(q1)
+                qc.x(q2)
+            elif c == 1:
+                qc.x(q1)
+            elif c == 2:
+                qc.x(q2)
+    qc.mct(addr, aux[2], aux[3:], mode='basic')
+    qc.x(aux[0:2])
 
 
 def store_data(qc, addr, data, perm, aux, problem_set):
@@ -205,49 +207,49 @@ def phase_oracle(qc, addr, data, perm, oracle, aux, problem_set):
 
 
 def diffusion(qc, addr, perm, aux):
-    tmp = [None] * 12
+    tmp = [None] * 10
     for i in range(4):
         tmp[i] = addr[i]
-    for i in range(8):
+    for i in range(6):
         tmp[i + 4] = perm[i]
     qc.h(tmp)
     qc.x(tmp)
-    qc.h(tmp[11])
-    qc.mct(tmp[0:11], tmp[11], aux, mode='basic')
-    qc.h(tmp[11])
+    qc.h(tmp[9])
+    qc.mct(tmp[0:9], tmp[9], aux, mode='basic')
+    qc.h(tmp[9])
     qc.x(tmp)
     qc.h(tmp)
 
 
 def week3_ans_func(problem_set):
     # TODO: test by changing the order
-    problem_set = \
-        [
-        [['0', '2'], ['1', '0'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '3']],
-        [['0', '0'], ['0', '1'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '3']],
-        [['0', '0'], ['1', '1'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
-        [['0', '0'], ['0', '1'], ['1', '1'], ['1', '3'], ['3', '2'], ['3', '3']],
-        [['0', '2'], ['1', '0'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
-        [['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '1'], ['3', '3']],
-        [['0', '2'], ['0', '3'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
-        [['0', '0'], ['0', '3'], ['1', '2'], ['2', '2'], ['2', '3'], ['3', '0']],
-        [['0', '3'], ['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
-        [['0', '0'], ['0', '1'], ['1', '3'], ['2', '1'], ['2', '3'], ['3', '0']],
-        [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '2']], # answer
-        [['0', '0'], ['1', '3'], ['2', '0'], ['2', '1'], ['2', '3'], ['3', '1']],
-        [['0', '1'], ['0', '2'], ['1', '0'], ['1', '2'], ['2', '2'], ['2', '3']],
-        [['0', '3'], ['1', '0'], ['1', '3'], ['2', '1'], ['2', '2'], ['3', '0']],
-        [['0', '2'], ['0', '3'], ['1', '2'], ['2', '3'], ['3', '0'], ['3', '1']],
-        [['0', '1'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '1']],
-        ]
+    #problem_set = \
+    #    [
+    #    [['0', '2'], ['1', '0'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '3']],
+    #    [['0', '0'], ['0', '1'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '3']],
+    #    [['0', '0'], ['1', '1'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
+    #    [['0', '0'], ['0', '1'], ['1', '1'], ['1', '3'], ['3', '2'], ['3', '3']],
+    #    [['0', '2'], ['1', '0'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
+    #    [['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '1'], ['3', '3']],
+    #    [['0', '2'], ['0', '3'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
+    #    [['0', '0'], ['0', '3'], ['1', '2'], ['2', '2'], ['2', '3'], ['3', '0']],
+    #    [['0', '3'], ['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
+    #    [['0', '0'], ['0', '1'], ['1', '3'], ['2', '1'], ['2', '3'], ['3', '0']],
+    #    [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '2']], # answer
+    #    [['0', '0'], ['1', '3'], ['2', '0'], ['2', '1'], ['2', '3'], ['3', '1']],
+    #    [['0', '1'], ['0', '2'], ['1', '0'], ['1', '2'], ['2', '2'], ['2', '3']],
+    #    [['0', '3'], ['1', '0'], ['1', '3'], ['2', '1'], ['2', '2'], ['3', '0']],
+    #    [['0', '2'], ['0', '3'], ['1', '2'], ['2', '3'], ['3', '0'], ['3', '1']],
+    #    [['0', '1'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '1']],
+    #    ]
 
     address = QuantumRegister(4)
     data = QuantumRegister(6) # is each star corresponding to one permutation?
-    perm = QuantumRegister(8) # row and col
+    perm = QuantumRegister(6) # row and col
     oracle = QuantumRegister(1)
-    aux = QuantumRegister(9)
+    aux = QuantumRegister(11)
     solution = ClassicalRegister(4)
-    #solution = ClassicalRegister(8) # perm
+    #solution = ClassicalRegister(6) # perm
     #solution = ClassicalRegister(2) # adder
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
     #solution = ClassicalRegister(9) # store_one_board
@@ -257,7 +259,12 @@ def week3_ans_func(problem_set):
     # answer -------------------------------------------------------------------
     # initialize
     qc.h(address)
-    qc.h(perm)
+    # perm[i] = (|00> + |01> + |10>)/sqrt(3)
+    for i in range(3):
+        qc.ry(2.0 * math.asin(1.0 / math.sqrt(3)), perm[i*2])
+        qc.x(perm[i*2])
+        qc.ch(perm[i*2], perm[i*2+1])
+        qc.x(perm[i*2])
     qc.x(oracle)
     qc.h(oracle)
 
@@ -269,7 +276,10 @@ def week3_ans_func(problem_set):
     # answer: addr == 10 (0b1010)
 
     # test perm ----------------------------------------------------------------
-    #qc.h(perm)
+    #for i in range(3):
+    #    qc.ry(2.0 * math.asin(1.0 / math.sqrt(3)), perm[i*2])
+    #    qc.ch(perm[i*2], perm[i*2+1])
+    #    qc.x(perm[i*2])
     #qc.x(oracle)
     #qc.h(oracle)
 
