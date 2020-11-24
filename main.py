@@ -92,114 +92,116 @@ def inv_adder2_dirty(qc, s, x, c):
     qc.rccx(x, s[0], c)
 
 def is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 5
+    assert len(dirty) >= 7
     qc.x(xs[0:3])
     qc.mct(xs[0:3], dirty[0], aux, mode='basic')
     qc.x(dirty[0]) # xs[0:3] に少なくとも 1 が 1 つある
     qc.x(xs[0:3])
     s = [xs[0], dirty[1]]
-    adder2(qc, s, xs[1], dirty[2])
-    adder2(qc, s, xs[2], dirty[2])
-    adder2_dirty(qc, s, xs[3], dirty[2])
-    adder2_dirty(qc, s, xs[4], dirty[3])
-    adder2_dirty(qc, s, xs[5], dirty[4])
+    adder2_dirty(qc, s, xs[1], dirty[2])
+    adder2_dirty(qc, s, xs[2], dirty[3])
+    adder2_dirty(qc, s, xs[3], dirty[4])
+    adder2_dirty(qc, s, xs[4], dirty[5])
+    adder2_dirty(qc, s, xs[5], dirty[6])
     qc.x(s[0])
     qc.x(s[1])
     qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
-    qc.x(s[1])
-    qc.x(s[0])
+    #qc.x(s[1])
+    #qc.x(s[0])
 
-def inv_is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 5
+def inv_is_count4(qc, xs, dirty, aux):
+    assert len(dirty) >= 7
     s = [xs[0], dirty[1]]
-    qc.x(s[0])
+    #qc.x(s[0])
+    #qc.x(s[1])
+    #qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
     qc.x(s[1])
-    qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
-    qc.x(s[1])
     qc.x(s[0])
-    inv_adder2_dirty(qc, s, xs[5], dirty[4])
-    inv_adder2_dirty(qc, s, xs[4], dirty[3])
-    inv_adder2_dirty(qc, s, xs[3], dirty[2])
-    inv_adder2(qc, s, xs[2], dirty[2])
-    inv_adder2(qc, s, xs[1], dirty[2])
+    inv_adder2_dirty(qc, s, xs[5], dirty[6])
+    inv_adder2_dirty(qc, s, xs[4], dirty[5])
+    inv_adder2_dirty(qc, s, xs[3], dirty[4])
+    inv_adder2_dirty(qc, s, xs[2], dirty[3])
+    inv_adder2_dirty(qc, s, xs[1], dirty[2])
     qc.x(xs[0:3])
     qc.x(dirty[0])
     qc.mct(xs[0:3], dirty[0], aux, mode='basic')
     qc.x(xs[0:3])
 
 # addr == 1
-def check_one_board(qc, addr, perm, oracle, aux, stars):
-    assert len(aux) >= 15
-    workspace = aux[0:6]
-    aux2 = aux[6:] # can use 9 aux
-    def proc():
-        for i in range(6):
-            r, c = int(stars[i][0]), int(stars[i][1])
-            q1, q2 = perm[r*2], perm[r*2+1]
-            if c == 0:
-                qc.x(q1)
-                qc.x(q2)
-            elif c == 1:
-                qc.x(q1)
-            elif c == 2:
-                qc.x(q2)
+def store_one_board(qc, addr, data, perm, aux, stars):
+    qc.mct(addr, aux[0], aux[1:], mode='basic')
+    for i in range(6):
+        r, c = int(stars[i][0]), int(stars[i][1])
+        q1, q2 = perm[r*2], perm[r*2+1]
+        if c == 0:
+            qc.x(q1)
+            qc.x(q2)
+        elif c == 1:
+            qc.x(q1)
+        elif c == 2:
+            qc.x(q2)
 
-            qc.rccx(q1, q2, workspace[i])
+        qc.mct([aux[0], q1, q2], data[i], aux[1:], mode='basic')
 
-            if c == 0:
-                qc.x(q1)
-                qc.x(q2)
-            elif c == 1:
-                qc.x(q1)
-            elif c == 2:
-                qc.x(q2)
+        if c == 0:
+            qc.x(q1)
+            qc.x(q2)
+        elif c == 1:
+            qc.x(q1)
+        elif c == 2:
+            qc.x(q2)
+    qc.mct(addr, aux[0], aux[1:], mode='basic')
 
-    proc()
-    is_count4(qc, workspace, aux2[0], aux2[1:6], aux2[6])
-    qc.mct([addr[0], addr[1], addr[2], addr[3], aux2[0]], oracle, aux2[6:9], mode='basic')
-    inv_is_count4(qc, workspace, aux2[0],aux2[1:6], aux2[6])
-    proc()
+
+def store_data(qc, addr, data, perm, aux, problem_set):
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1111])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1110])
+    qc.x(addr[1])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1010])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1011])
+    qc.x(addr[2])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1001])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1000])
+    qc.x(addr[0])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0000])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0001])
+    qc.x(addr[2])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0011])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0010])
+    qc.x(addr[1])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0110])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0111])
+    qc.x(addr[2])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0101])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b0100])
+    qc.x(addr[0])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1100])
+    qc.x(addr[3])
+    store_one_board(qc, addr, data, perm, aux, problem_set[0b1101])
+    qc.x(addr[2])
+
 
 # memo: gray_code
 # 15, 14, 10, 11, 9, 8, 0, 1, 3, 2, 6, 7, 5, 4, 12, 13
-def phase_oracle(qc, addr, perm, oracle, aux, problem_set):
-    create_perm(qc, perm, oracle, aux)
+def phase_oracle(qc, addr, data, perm, oracle, aux, problem_set):
+    aux_for_perm = aux[:]
+    aux_for_perm += data[:] # data used as aux here
+    create_perm(qc, perm, oracle, aux_for_perm)
+    store_data(qc, addr, data, perm, aux, problem_set)
 
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1111])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1110])
-    qc.x(addr[1])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1010])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1011])
-    qc.x(addr[2])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1001])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1000])
-    qc.x(addr[0])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0000])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0001])
-    qc.x(addr[2])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0011])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0010])
-    qc.x(addr[1])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0110])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0111])
-    qc.x(addr[2])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0101])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b0100])
-    qc.x(addr[0])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1100])
-    qc.x(addr[3])
-    check_one_board(qc, addr, perm, oracle, aux, problem_set[0b1101])
-    qc.x(addr[2])
+    is_count4(qc, data, oracle, aux[0:7], aux[7])
 
     # inversion
-    inv_create_perm(qc, perm, oracle, aux)
+    inv_is_count4(qc, data, aux[0:7], aux[7])
+    store_data(qc, addr, data, perm, aux, problem_set)
+    inv_create_perm(qc, perm, oracle, aux_for_perm)
 
 
 def diffusion(qc, addr, perm, aux):
@@ -220,7 +222,8 @@ def diffusion(qc, addr, perm, aux):
 def week3_ans_func(problem_set):
     # TODO: test by changing the order
     problem_set = \
-        [[['0', '2'], ['1', '0'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '3']],
+        [
+        [['0', '2'], ['1', '0'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '3']],
         [['0', '0'], ['0', '1'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '3']],
         [['0', '0'], ['1', '1'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
         [['0', '0'], ['0', '1'], ['1', '1'], ['1', '3'], ['3', '2'], ['3', '3']],
@@ -230,25 +233,26 @@ def week3_ans_func(problem_set):
         [['0', '0'], ['0', '3'], ['1', '2'], ['2', '2'], ['2', '3'], ['3', '0']],
         [['0', '3'], ['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
         [['0', '0'], ['0', '1'], ['1', '3'], ['2', '1'], ['2', '3'], ['3', '0']],
-        [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '2']],
+        [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '2']], # answer
         [['0', '0'], ['1', '3'], ['2', '0'], ['2', '1'], ['2', '3'], ['3', '1']],
         [['0', '1'], ['0', '2'], ['1', '0'], ['1', '2'], ['2', '2'], ['2', '3']],
         [['0', '3'], ['1', '0'], ['1', '3'], ['2', '1'], ['2', '2'], ['3', '0']],
         [['0', '2'], ['0', '3'], ['1', '2'], ['2', '3'], ['3', '0'], ['3', '1']],
-        [['0', '1'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '1']]]
-    problem_set[0], problem_set[10] = problem_set[10], problem_set[0]
+        [['0', '1'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '1']],
+        ]
 
     address = QuantumRegister(4)
+    data = QuantumRegister(6) # is each star corresponding to one permutation?
     perm = QuantumRegister(8) # row and col
     oracle = QuantumRegister(1)
-    aux = QuantumRegister(15)
+    aux = QuantumRegister(9)
     solution = ClassicalRegister(4)
     #solution = ClassicalRegister(8) # perm
     #solution = ClassicalRegister(2) # adder
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
-    #solution = ClassicalRegister(9) # check_one_board
+    #solution = ClassicalRegister(9) # store_one_board
     #solution = ClassicalRegister(12) # oracle
-    qc = QuantumCircuit(address, perm, oracle, aux, solution)
+    qc = QuantumCircuit(address, data, perm, oracle, aux, solution)
 
     # answer -------------------------------------------------------------------
     # initialize
@@ -258,7 +262,7 @@ def week3_ans_func(problem_set):
     qc.h(oracle)
 
     for i in range(1):
-        phase_oracle(qc, address, perm, oracle, aux, problem_set)
+        phase_oracle(qc, address, data, perm, oracle, aux, problem_set)
         diffusion(qc, address, perm, aux)
 
     qc.measure(address, solution)
@@ -292,11 +296,11 @@ def week3_ans_func(problem_set):
     #qc.measure(perm[0:4], solution[0:4])
     #qc.measure(oracle[0], solution[4])
 
-    # test check_one_board -----------------------------------------------------
+    # test store_one_board -----------------------------------------------------
     #qc.h(perm)
     #qc.x(address)
     #board = problem_set[0]
-    #check_one_board(qc, address, perm, oracle, aux, board)
+    #store_one_board(qc, address, perm, oracle, aux, board)
     #qc.measure(perm, solution[0:8])
     #qc.measure(oracle, solution[8])
 
@@ -308,7 +312,7 @@ def week3_ans_func(problem_set):
 
     #for i in range(2):
     #    create_perm(qc, perm, oracle, aux)
-    #    check_one_board(qc, address, perm, oracle, aux, problem_set[10])
+    #    store_one_board(qc, address, perm, oracle, aux, problem_set[10])
     #    inv_create_perm(qc, perm, oracle, aux)
 
     #    diffusion(qc, address, perm, aux)
