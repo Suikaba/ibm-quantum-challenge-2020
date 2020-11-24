@@ -58,6 +58,8 @@ def store_data(qc, addr, data, aux, board):
 
 # memo: gray_code
 # 15, 14, 10, 11, 9, 8, 0, 1, 3, 2, 6, 7, 5, 4, 12, 13
+# アドレスの and は aux が大量に余っているので共通部分をいろいろ抜き出すともっと良くなる
+# 他の人のスコアを様子見しながら潜伏する
 def store_stars(qc, addr, data, aux, problem_set):
     store_data(qc, addr, data, aux, preprocess(problem_set[0b1111]))
     qc.x(addr[3])
@@ -160,7 +162,7 @@ def week3_ans_func(problem_set):
 
     # answer -------------------------------------------------------------------
     # initialize
-    # create |01> + |10>
+    # create perm = |01> + |10>
     qc.h(perm[0])
     qc.cx(perm[0], perm[1])
     qc.x(perm[0])
@@ -174,22 +176,6 @@ def week3_ans_func(problem_set):
 
     qc.measure(address, solution)
     qc.reverse_bits()
-    # answer: addr == 10 (0b1010)
-
-    # test oracle
-    #qc.h(perm[0])
-    #qc.cx(perm[0], perm[1])
-    #qc.x(perm[0])
-    #qc.h(address)
-
-    #store_data(qc, address, data, aux, preprocess(problem_set[1]))
-    #qc.x(perm[0])
-    #qc.mct([perm[0], data[2], perm[1], data[5]], aux[0])
-    #qc.x(perm)
-    #qc.mct([perm[0], data[3], perm[1], data[4]], aux[1])
-    #qor(qc, aux[0], aux[1], oracle)
-
-    #qc.measure(data, solution[0:6])
-    #qc.measure(oracle, solution[6])
+    # answer of pretest: 10 (0b1010)
 
     return qc
