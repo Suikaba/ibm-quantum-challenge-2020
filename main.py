@@ -203,7 +203,7 @@ def inv_inner_grover_1(qc, shots, oracle, aux):
 def inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set):
     inner_grover_1(qc, shots, oracle, aux)
     store_data(qc, addr, data, shots, aux, problem_set)
-    is_count3(qc, shots, aux[0], aux[1:])
+    is_count3(qc, shots, aux[0], aux[1:]) # ここ uncomputation しなくてもいいので最適化可能
     qc.mct(data, aux[2], aux[3:], mode='basic')
 
     qc.ccx(aux[0], aux[2], oracle)
@@ -238,16 +238,11 @@ def inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
 
 
 def outer_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set):
-    s = [shots[0], aux[0]]
-    inner_grover_1(qc, shots, oracle, aux)
     inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
-    counter3(qc, shots, s, aux[1])
 
-    qc.ccx(s[0], s[1], oracle)
+    is_count3(qc, shots, oracle, aux)
 
-    inv_counter3(qc, shots, s, aux[1])
     inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
-    inv_inner_grover_1(qc, shots, oracle, aux)
 
 def outer_diffusion(qc, addr, shots, aux):
     tmp = addr[:]
