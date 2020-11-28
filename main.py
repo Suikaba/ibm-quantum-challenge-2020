@@ -9,32 +9,41 @@ def qor(qc, a, b, c):
     qc.x(b)
 
 
-def adder3(qc, s, x, c):
-    qc.rccx(x, s[0], c[0])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[0], s[1])
-    qc.rccx(x, s[0], c[0])
+def adder2(qc, s, x, c):
+    qc.ccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.ccx(x, s[0], c)
     qc.cx(x, s[0])
 
-def inv_adder3(qc, s, x, c):
+def inv_adder2(qc, s, x, c):
     qc.cx(x, s[0])
-    qc.rccx(x, s[0], c[0])
-    qc.cx(c[0], s[1])
-    qc.rccx(c[0], s[1], c[1])
-    qc.cx(c[1], s[2])
-    qc.rccx(c[0], s[1], c[1])
-    qc.rccx(x, s[0], c[0])
+    qc.ccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.ccx(x, s[0], c)
 
 
-def counter3(qc, shots, s, c, aux):
+def counter3(qc, shots, s, c):
     for i in range(7):
-        adder3(qc, s, shots[i+1], c)
+        adder2(qc, s, shots[i+1], c)
 
-def inv_counter3(qc, shots, s, c, aux):
+def inv_counter3(qc, shots, s, c):
     for i in reversed(range(7)):
-        inv_adder3(qc, s, shots[i+1], c)
+        inv_adder2(qc, s, shots[i+1], c)
+
+def is_count3(qc, shots, out, aux):
+    assert len(aux) >= 6
+    s = [shots[0], aux[0]]
+    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
+    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
+    qc.x([aux[1], aux[2]])
+    qc.ccx(aux[1], aux[2], aux[3])
+    counter3(qc, shots, s, aux[4])
+    qc.mct([aux[3], s[0], s[1]], out, aux[5:])
+    inv_counter3(qc, shots, s, aux[4])
+    qc.ccx(aux[1], aux[2], aux[3])
+    qc.x([aux[1], aux[2]])
+    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
+    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
 
 def store_asteroids(qc, addr, data, shots, aux, asteroids):
     qc.mct(addr, aux[0], aux[1:], mode='basic')
@@ -83,27 +92,29 @@ def store_data(qc, addr, data, shots, aux, problem_set):
 
 # find 3-shots
 def inner_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set):
-    s = [shots[0], aux[0], aux[1]]
-    c = aux[2:4]
-    counter3(qc, shots, s, c, aux[4:])
-    qc.x(s[2])
+    store_data(qc, addr, data, shots, aux, problem_set)
+    is_count3(qc, shots, aux[0], aux[1:])
+    qc.mct(data, aux[2], aux[3:], mode='basic')
 
-    qc.mct(s, oracle, aux[4:], mode='basic')
+    qc.ccx(aux[0], aux[2], oracle)
 
-    qc.x(s[2])
-    inv_counter3(qc, shots, s, c, aux[5:])
+    qc.mct(data, aux[2], aux[3:], mode='basic')
+    is_count3(qc, shots, aux[0], aux[1:])
+    store_data(qc, addr, data, shots, aux, problem_set)
 
 
 def inner_diffusion(qc, addr, shots, aux):
-    qc.h(shots)
-    qc.x(shots)
-    qc.h(shots[7])
-    qc.mct(shots[0:7], shots[7], aux, mode='basic')
-    qc.h(shots[7])
-    qc.x(shots)
-    qc.h(shots)
+    #tmp = addr[:]
+    tmp = shots[:]
+    qc.h(tmp)
+    qc.x(tmp)
+    qc.h(tmp[7])
+    qc.mct(tmp[0:7], tmp[7], aux, mode='basic')
+    qc.h(tmp[7])
+    qc.x(tmp)
+    qc.h(tmp)
 
-inner_iter_cnt = 1
+inner_iter_cnt = 11
 def inner_grover(qc, addr, data, shots, oracle, aux, problem_set):
     for i in range(inner_iter_cnt):
         inner_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set)
@@ -115,14 +126,13 @@ def inv_inner_grover(qc, addr, data, shots, oracle, aux, problem_set):
         inner_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set)
 
 def outer_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set):
+    s = [shots[0], aux[0]]
     inner_grover(qc, addr, data, shots, oracle, aux, problem_set)
+    counter3(qc, shots, s, aux[1])
 
-    store_data(qc, addr, data, shots, aux, problem_set)
+    qc.ccx(s[0], s[1], oracle)
 
-    qc.mct(data, oracle, aux[0:], mode='basic')
-
-    store_data(qc, addr, data, shots, aux, problem_set)
-
+    inv_counter3(qc, shots, s, aux[1])
     inv_inner_grover(qc, addr, data, shots, oracle, aux, problem_set)
 
 def outer_diffusion(qc, addr, shots, aux):
@@ -197,31 +207,30 @@ def week3_ans_func(problem_set):
     shots = QuantumRegister(8) # row and col
     oracle = QuantumRegister(1)
     aux = QuantumRegister(9)
-    #solution = ClassicalRegister(4) # answer
-    #solution = ClassicalRegister(6) # perm
+    solution = ClassicalRegister(4) # answer
     #solution = ClassicalRegister(2) # adder
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
     #solution = ClassicalRegister(10) # store_asteroids
-    solution = ClassicalRegister(12) # inner grover
+    #solution = ClassicalRegister(12) # inner grover
     #solution = ClassicalRegister(12) # oracle
     qc = QuantumCircuit(address, data, shots, oracle, aux, solution)
 
     # answer -------------------------------------------------------------------
     # initialize
-    #qc.h(address)
-    #qc.h(shots)
-    #qc.x(oracle)
-    #qc.h(oracle)
+    qc.h(address)
+    qc.h(shots)
+    qc.x(oracle)
+    qc.h(oracle)
 
-    #for i in range(1):
-    #    outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
-    #    outer_diffusion(qc, address, aux)
+    for i in range(1):
+        outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
+        outer_diffusion(qc, address, data, aux)
 
-    #qc.measure([address[3], address[2], address[1], address[0]], solution)
+    qc.measure([address[3], address[2], address[1], address[0]], solution)
 
     # test store_data ----------------------------------------------------------
     #qc.h(address)
-    #qc.x([shots[0], shots[3], shots[4]])
+    #qc.x([shots[0], shots[1], shots[4]])
 
     #store_data(qc, address, data, shots, aux, problem_set)
 
@@ -234,32 +243,33 @@ def week3_ans_func(problem_set):
     #qc.x(oracle)
     #qc.h(oracle)
 
+    ##store_data(qc, address, data, shots, aux, problem_set)
     #inner_grover(qc, address, data, shots, oracle, aux, problem_set)
 
     #qc.measure(shots, solution[0:8])
     #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     # test oracle --------------------------------------------------------------
-    qc.h(address)
-    qc.h(shots)
-    qc.x(oracle)
-    qc.h(oracle)
+    #qc.h(address)
+    #qc.h(shots)
+    #qc.x(oracle)
+    #qc.h(oracle)
 
-    for i in range(1):
-        outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
-        outer_diffusion(qc, address, shots, aux)
+    #for i in range(1):
+    #    outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
+    #    outer_diffusion(qc, address, shots, aux)
 
-    #qc.measure(shots, solution[0:8])
-    qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
+    ##qc.measure(shots, solution[0:8])
+    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     return qc
 
 
 # for test
-qc = week3_ans_func(prob1)
-
-job = execute(qc, backend=backend, shots=1000, seed_simulator=12345, backend_options={"fusion_enable":True})
-result = job.result()
-count = result.get_counts()
+#qc = week3_ans_func(prob1)
+#
+#job = execute(qc, backend=backend, shots=1000, seed_simulator=12345, backend_options={"fusion_enable":True})
+#result = job.result()
+#count = result.get_counts()
 
 count
