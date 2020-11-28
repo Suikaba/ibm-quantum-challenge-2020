@@ -1,5 +1,3 @@
-import math
-
 def qor(qc, a, b, c):
     qc.x(a)
     qc.x(b)
@@ -8,56 +6,13 @@ def qor(qc, a, b, c):
     qc.x(a)
     qc.x(b)
 
-
-# create 3 perm
-def inner_phase_oracle(qc, perm, oracle, aux):
-    # A, B, C
-    # A, B, C+B    (1 -> 2)
-    # A, B+A, C+B  (0 -> 1)
-    # A, B+A, C+A  (1 -> 2)
-    def add_and_check(i, j, out):
-        qc.cx(perm[i*2], perm[j*2])
-        qc.cx(perm[i*2+1], perm[j*2+1])
-        qor(qc, perm[j*2], perm[j*2+1], out)
-    def inv_add_and_check(i, j, out):
-        qor(qc, perm[j*2], perm[j*2+1], out)
-        qc.cx(perm[i*2+1], perm[j*2+1])
-        qc.cx(perm[i*2], perm[j*2])
-
-    workspace = aux[0:3]
-    def check_all():
-        add_and_check(1, 2, workspace[0])
-        add_and_check(0, 1, workspace[1])
-        add_and_check(1, 2, workspace[2])
-    def inv_check_all():
-        inv_add_and_check(1, 2, workspace[2])
-        inv_add_and_check(0, 1, workspace[1])
-        inv_add_and_check(1, 2, workspace[0])
-
-    check_all()
-    qc.mct(workspace, oracle, aux[3:], mode='basic')
-    inv_check_all()
-
-def inner_diffusion(qc, perm, aux):
-    qc.h(perm)
-    qc.x(perm)
-    qc.h(perm[5])
-    qc.mct(perm[0:5], perm[5], aux, mode='basic')
-    qc.h(perm[5])
-    qc.x(perm)
-    qc.h(perm)
-
-# create permutations by grover search
-iter_cnt1 = 1 # 2 is best
-def create_perm(qc, perm, oracle, aux):
-    for i in range(iter_cnt1):
-        inner_phase_oracle(qc, perm, oracle, aux)
-        inner_diffusion(qc, perm, aux)
-
-def inv_create_perm(qc, perm, oracle, aux):
-    for i in range(iter_cnt1):
-        inner_diffusion(qc, perm, aux)
-        inner_phase_oracle(qc, perm, oracle, aux)
+def rqor(qc, a, b, c):
+    qc.x(a)
+    qc.x(b)
+    qc.rccx(a, b, c)
+    qc.x(c)
+    qc.x(a)
+    qc.x(b)
 
 
 def adder2(qc, s, x, c):
@@ -66,271 +21,379 @@ def adder2(qc, s, x, c):
     qc.rccx(x, s[0], c)
     qc.cx(x, s[0])
 
-# after call, c become dirty bit
-def adder2_dirty(qc, s, x, c):
-    qc.rccx(x, s[0], c)
-    qc.cx(c, s[1])
-    #qc.rccx(x, s[0], c)
-    qc.cx(x, s[0])
-
 def inv_adder2(qc, s, x, c):
     qc.cx(x, s[0])
     qc.rccx(x, s[0], c)
     qc.cx(c, s[1])
     qc.rccx(x, s[0], c)
 
-def inv_adder2_dirty(qc, s, x, c):
-    qc.cx(x, s[0])
-    #qc.rccx(x, s[0], c)
-    qc.cx(c, s[1])
-    qc.rccx(x, s[0], c)
 
-def is_count4(qc, xs, out, dirty, aux):
-    assert len(dirty) >= 7
-    qc.x(xs[0:3])
-    qc.mct(xs[0:3], dirty[0], aux, mode='basic')
-    qc.x(dirty[0]) # xs[0:3] に少なくとも 1 が 1 つある
-    qc.x(xs[0:3])
-    s = [xs[0], dirty[1]]
-    adder2_dirty(qc, s, xs[1], dirty[2])
-    adder2_dirty(qc, s, xs[2], dirty[3])
-    adder2_dirty(qc, s, xs[3], dirty[4])
-    adder2_dirty(qc, s, xs[4], dirty[5])
-    adder2_dirty(qc, s, xs[5], dirty[6])
-    qc.x(s[0])
-    qc.x(s[1])
-    qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
-    #qc.x(s[1])
-    #qc.x(s[0])
+def counter3(qc, shots, s, c):
+    for i in range(7):
+        adder2(qc, s, shots[i+1], c)
 
-def inv_is_count4(qc, xs, dirty, aux):
-    assert len(dirty) >= 7
-    s = [xs[0], dirty[1]]
-    #qc.x(s[0])
-    #qc.x(s[1])
-    #qc.mct([dirty[0], s[0], s[1]], out, aux, mode='basic')
-    qc.x(s[1])
-    qc.x(s[0])
-    inv_adder2_dirty(qc, s, xs[5], dirty[6])
-    inv_adder2_dirty(qc, s, xs[4], dirty[5])
-    inv_adder2_dirty(qc, s, xs[3], dirty[4])
-    inv_adder2_dirty(qc, s, xs[2], dirty[3])
-    inv_adder2_dirty(qc, s, xs[1], dirty[2])
-    qc.x(xs[0:3])
-    qc.x(dirty[0])
-    qc.mct(xs[0:3], dirty[0], aux, mode='basic')
-    qc.x(xs[0:3])
+def inv_counter3(qc, shots, s, c):
+    for i in reversed(range(7)):
+        inv_adder2(qc, s, shots[i+1], c)
 
-# addr == 1
-def store_one_board(qc, addr, data, perm, aux, stars):
-    qc.x(aux[0:2])
-    qc.mct(addr, aux[2], aux[3:], mode='basic')
+def is_count3(qc, shots, out, aux):
+    assert len(aux) >= 6
+    s = [shots[0], aux[0]]
+    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
+    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
+    qc.x([aux[1], aux[2]])
+    qc.rccx(aux[1], aux[2], aux[3])
+    counter3(qc, shots, s, aux[4])
+    qc.mct([aux[3], s[0], s[1]], out, aux[5:])
+    inv_counter3(qc, shots, s, aux[4])
+    qc.rccx(aux[1], aux[2], aux[3])
+    qc.x([aux[1], aux[2]])
+    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
+    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
+
+
+def store_asteroids(qc, addr_f, data, shots, aux, asteroids):
     for i in range(6):
-        r, c = int(stars[i][0]), int(stars[i][1])
-        for j in range(4):
-            if r == j:
-                q1, q2 = aux[0], aux[1]
-            elif r < j:
-                q1, q1 = perm[r*2], perm[r*2+1]
-            else:
-                q1, q2 = perm[(r-1)*2], perm[(r-1)*2+1]
-            if c == 0:
-                qc.x(q1)
-                qc.x(q2)
-            elif c == 1:
-                qc.x(q1)
-            elif c == 2:
-                qc.x(q2)
-
-            qc.mct([aux[2], q1, q2], data[i], aux[3:], mode='basic')
-
-            if c == 0:
-                qc.x(q1)
-                qc.x(q2)
-            elif c == 1:
-                qc.x(q1)
-            elif c == 2:
-                qc.x(q2)
-    qc.mct(addr, aux[2], aux[3:], mode='basic')
-    qc.x(aux[0:2])
+        r, c = int(asteroids[i][0]), int(asteroids[i][1])
+        rqor(qc, shots[r], shots[4+c], aux)
+        qc.rccx(addr_f, aux, data[i])
+        rqor(qc, shots[r], shots[4+c], aux)
 
 
-def store_data(qc, addr, data, perm, aux, problem_set):
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1111])
+def store_data(qc, addr, data, shots, aux, problem_set):
+    cache_addr_lo = aux[0:4]
+    cache_addr_hi = aux[4]
+    addr_f = aux[5]
+    aux_store = aux[6]
+
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b11])
+    qc.x(addr[2])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b01])
     qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1110])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b00])
+    qc.x(addr[2])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b10])
+    qc.x(addr[3])
+
+
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1111])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1110])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1100])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1101])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+
     qc.x(addr[1])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1010])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1011])
-    qc.x(addr[2])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1001])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1000])
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1010])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1011])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1001])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1000])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+
     qc.x(addr[0])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0000])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0001])
-    qc.x(addr[2])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0011])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0010])
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0000])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0001])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0011])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0010])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+
     qc.x(addr[1])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0110])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0111])
-    qc.x(addr[2])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0101])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b0100])
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0110])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0111])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0101])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
+
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0100])
+    qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
+
+    qc.rccx(addr[0], addr[1], cache_addr_hi)
     qc.x(addr[0])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1100])
-    qc.x(addr[3])
-    store_one_board(qc, addr, data, perm, aux, problem_set[0b1101])
+
+
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b11])
     qc.x(addr[2])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b01])
+    qc.x(addr[3])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b00])
+    qc.x(addr[2])
+    qc.rccx(addr[2], addr[3], cache_addr_lo[0b10])
+    qc.x(addr[3])
 
 
-# memo: gray_code
-# 15, 14, 10, 11, 9, 8, 0, 1, 3, 2, 6, 7, 5, 4, 12, 13
-def phase_oracle(qc, addr, data, perm, oracle, aux, problem_set):
-    aux_for_perm = aux[:]
-    aux_for_perm += data[:] # data used as aux here
-    create_perm(qc, perm, oracle, aux_for_perm)
-    store_data(qc, addr, data, perm, aux, problem_set)
+# 3発のやつだけとりあえず選んでおく
+# これだけなら qRAM いらんので比較的高速にできてうれしい
+def inner_phase_oracle_1(qc, shots, oracle, aux):
+    is_count3(qc, shots, oracle, aux)
 
-    is_count4(qc, data, oracle, aux[0:7], aux[7])
+def inner_diffusion_1(qc, shots, aux):
+    qc.h(shots)
+    qc.x(shots)
+    qc.h(shots[7])
+    qc.mct(shots[0:7], shots[7], aux, mode='basic')
+    qc.h(shots[7])
+    qc.x(shots)
+    qc.h(shots)
 
-    # inversion
-    inv_is_count4(qc, data, aux[0:7], aux[7])
-    store_data(qc, addr, data, perm, aux, problem_set)
-    inv_create_perm(qc, perm, oracle, aux_for_perm)
+inner_cnt_1 = 1
+def inner_grover_1(qc, shots, oracle, aux):
+    for i in range(inner_cnt_1):
+        inner_phase_oracle_1(qc, shots, oracle, aux)
+        inner_diffusion_1(qc, shots, aux)
+
+def inv_inner_grover_1(qc, shots, oracle, aux):
+    for i in range(inner_cnt_1):
+        inner_diffusion_1(qc, shots, aux)
+        inner_phase_oracle_1(qc, shots, oracle, aux)
 
 
-def diffusion(qc, addr, perm, aux):
-    tmp = [None] * 10
-    for i in range(4):
-        tmp[i] = addr[i]
-    for i in range(6):
-        tmp[i + 4] = perm[i]
+def inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set):
+    inner_grover_1(qc, shots, oracle, aux)
+    store_data(qc, addr, data, shots, aux, problem_set)
+    is_count3(qc, shots, aux[0], aux[1:])
+    qc.mct(data, aux[2], aux[3:], mode='basic')
+
+    qc.ccx(aux[0], aux[2], oracle)
+
+    qc.mct(data, aux[2], aux[3:], mode='basic')
+    is_count3(qc, shots, aux[0], aux[1:])
+    store_data(qc, addr, data, shots, aux, problem_set)
+    inv_inner_grover_1(qc, shots, oracle, aux)
+
+
+def inner_diffusion_2(qc, addr, shots, aux):
+    #tmp = addr[:]
+    tmp = shots[:]
     qc.h(tmp)
     qc.x(tmp)
-    qc.h(tmp[9])
-    qc.mct(tmp[0:9], tmp[9], aux, mode='basic')
-    qc.h(tmp[9])
+    qc.h(tmp[7])
+    qc.mct(tmp[0:7], tmp[7], aux, mode='basic')
+    qc.h(tmp[7])
     qc.x(tmp)
     qc.h(tmp)
+
+inner_cnt_2 = 3
+def inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
+    for i in range(inner_cnt_2):
+        inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set)
+        inner_diffusion_2(qc, addr, shots, aux)
+
+def inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
+    for i in range(inner_cnt_2):
+        inner_diffusion_2(qc, addr, shots, aux)
+        inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set)
+
+
+def outer_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set):
+    s = [shots[0], aux[0]]
+    inner_grover_1(qc, shots, oracle, aux)
+    inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
+    counter3(qc, shots, s, aux[1])
+
+    qc.ccx(s[0], s[1], oracle)
+
+    inv_counter3(qc, shots, s, aux[1])
+    inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
+    inv_inner_grover_1(qc, shots, oracle, aux)
+
+def outer_diffusion(qc, addr, shots, aux):
+    tmp = addr[:]
+    #tmp = shots[:]
+    qc.h(tmp)
+    qc.x(tmp)
+    qc.h(tmp[3])
+    qc.mct(tmp[0:3], tmp[3], aux, mode='basic')
+    qc.h(tmp[3])
+    qc.x(tmp)
+    qc.h(tmp)
+
+
+# pretest
+prob1 = \
+    [[['0', '1'], ['0', '2'], ['1', '0'], ['2', '0'], ['3', '1'], ['3', '3']],
+    [['0', '2'], ['0', '3'], ['1', '1'], ['1', '3'], ['2', '0'], ['2', '1']],
+    [['0', '0'], ['0', '3'], ['2', '1'], ['2', '2'], ['3', '0'], ['3', '1']],
+    [['0', '0'], ['0', '1'], ['0', '2'], ['1', '1'], ['2', '0'], ['3', '2']],
+    [['0', '1'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '0'], ['3', '1']],
+    [['0', '2'], ['0', '3'], ['1', '1'], ['2', '0'], ['2', '1'], ['3', '0']],
+    [['0', '0'], ['0', '3'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']], # answer: 6
+    [['0', '2'], ['1', '1'], ['1', '3'], ['2', '0'], ['2', '3'], ['3', '2']],
+    [['0', '1'], ['0', '3'], ['2', '0'], ['2', '2'], ['3', '0'], ['3', '3']],
+    [['0', '0'], ['0', '2'], ['1', '0'], ['2', '2'], ['2', '3'], ['3', '3']],
+    [['1', '0'], ['1', '3'], ['2', '1'], ['2', '2'], ['3', '2'], ['3', '3']],
+    [['0', '0'], ['1', '0'], ['2', '1'], ['2', '2'], ['3', '2'], ['3', '3']],
+    [['0', '0'], ['1', '1'], ['1', '2'], ['2', '1'], ['2', '3'], ['3', '0']],
+    [['0', '1'], ['0', '3'], ['2', '1'], ['2', '2'], ['3', '0'], ['3', '1']],
+    [['0', '0'], ['0', '1'], ['1', '1'], ['1', '3'], ['3', '2'], ['3', '3']],
+    [['0', '0'], ['0', '3'], ['1', '2'], ['1', '3'], ['3', '0'], ['3', '1']]]
+prob2 = \
+    [[['0', '0'], ['0', '2'], ['1', '0'], ['1', '1'], ['3', '1'], ['3', '3']],
+    [['0', '2'], ['0', '3'], ['1', '1'], ['1', '3'], ['2', '0'], ['2', '1']],
+    [['0', '0'], ['1', '0'], ['2', '1'], ['2', '3'], ['3', '2'], ['3', '3']],
+    [['0', '2'], ['0', '3'], ['1', '1'], ['1', '2'], ['3', '0'], ['3', '2']],
+    [['0', '2'], ['0', '3'], ['2', '0'], ['2', '1'], ['3', '1'], ['3', '3']],
+    [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '2'], ['3', '1']],
+    [['0', '0'], ['1', '0'], ['2', '2'], ['2', '3'], ['3', '1'], ['3', '3']],
+    [['0', '0'], ['0', '1'], ['1', '2'], ['2', '0'], ['3', '1'], ['3', '2']],
+    [['0', '1'], ['0', '2'], ['1', '0'], ['1', '3'], ['3', '0'], ['3', '1']],
+    [['0', '0'], ['0', '2'], ['1', '0'], ['1', '3'], ['2', '1'], ['2', '2']],
+    [['0', '0'], ['0', '1'], ['0', '3'], ['1', '0'], ['2', '1'], ['3', '3']],
+    [['0', '0'], ['0', '3'], ['1', '1'], ['1', '3'], ['2', '0'], ['2', '2']],
+    [['0', '1'], ['1', '3'], ['2', '0'], ['2', '1'], ['2', '3'], ['3', '0']],
+    [['0', '0'], ['1', '1'], ['2', '0'], ['2', '3'], ['3', '1'], ['3', '2']], # answer: 13
+    [['0', '0'], ['0', '3'], ['1', '2'], ['2', '2'], ['3', '1'], ['3', '3']],
+    [['0', '2'], ['0', '3'], ['1', '0'], ['1', '2'], ['2', '1'], ['2', '2']]]
+prob3 = \
+    [[['0', '2'], ['0', '3'], ['1', '1'], ['2', '0'], ['3', '0'], ['3', '1']],
+    [['0', '1'], ['0', '3'], ['2', '0'], ['2', '2'], ['3', '0'], ['3', '1']],
+    [['0', '0'], ['0', '3'], ['1', '1'], ['1', '3'], ['2', '2'], ['2', '3']],
+    [['0', '2'], ['0', '3'], ['1', '0'], ['1', '1'], ['2', '3'], ['3', '1']], # answer: 3
+    [['0', '1'], ['0', '2'], ['1', '0'], ['2', '0'], ['2', '3'], ['3', '3']],
+    [['0', '3'], ['1', '0'], ['1', '2'], ['2', '1'], ['2', '2'], ['3', '3']],
+    [['0', '1'], ['0', '3'], ['2', '0'], ['2', '3'], ['3', '2'], ['3', '3']],
+    [['1', '0'], ['1', '1'], ['2', '1'], ['2', '3'], ['3', '2'], ['3', '3']],
+    [['0', '1'], ['0', '2'], ['1', '0'], ['1', '3'], ['2', '3'], ['3', '0']],
+    [['0', '0'], ['1', '1'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
+    [['0', '1'], ['0', '2'], ['1', '3'], ['2', '0'], ['3', '0'], ['3', '3']],
+    [['0', '0'], ['0', '1'], ['2', '0'], ['2', '3'], ['3', '2'], ['3', '3']],
+    [['0', '3'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '3']],
+    [['0', '0'], ['0', '3'], ['1', '0'], ['1', '1'], ['2', '0'], ['2', '2']],
+    [['0', '1'], ['0', '3'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '2']],
+    [['0', '2'], ['0', '3'], ['1', '3'], ['2', '0'], ['2', '2'], ['3', '0']]]
 
 
 def week3_ans_func(problem_set):
-    # TODO: test by changing the order
-    #problem_set = \
-    #    [
-    #    [['0', '2'], ['1', '0'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '3']],
-    #    [['0', '0'], ['0', '1'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '3']],
-    #    [['0', '0'], ['1', '1'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
-    #    [['0', '0'], ['0', '1'], ['1', '1'], ['1', '3'], ['3', '2'], ['3', '3']],
-    #    [['0', '2'], ['1', '0'], ['1', '3'], ['2', '0'], ['3', '2'], ['3', '3']],
-    #    [['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '1'], ['3', '3']],
-    #    [['0', '2'], ['0', '3'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
-    #    [['0', '0'], ['0', '3'], ['1', '2'], ['2', '2'], ['2', '3'], ['3', '0']],
-    #    [['0', '3'], ['1', '1'], ['1', '2'], ['2', '0'], ['2', '1'], ['3', '3']],
-    #    [['0', '0'], ['0', '1'], ['1', '3'], ['2', '1'], ['2', '3'], ['3', '0']],
-    #    [['0', '1'], ['0', '3'], ['1', '2'], ['1', '3'], ['2', '0'], ['3', '2']], # answer
-    #    [['0', '0'], ['1', '3'], ['2', '0'], ['2', '1'], ['2', '3'], ['3', '1']],
-    #    [['0', '1'], ['0', '2'], ['1', '0'], ['1', '2'], ['2', '2'], ['2', '3']],
-    #    [['0', '3'], ['1', '0'], ['1', '3'], ['2', '1'], ['2', '2'], ['3', '0']],
-    #    [['0', '2'], ['0', '3'], ['1', '2'], ['2', '3'], ['3', '0'], ['3', '1']],
-    #    [['0', '1'], ['1', '0'], ['1', '2'], ['2', '2'], ['3', '0'], ['3', '1']],
-    #    ]
-
     address = QuantumRegister(4)
     data = QuantumRegister(6) # is each star corresponding to one permutation?
-    perm = QuantumRegister(6) # row and col
+    shots = QuantumRegister(8) # row and col
     oracle = QuantumRegister(1)
-    aux = QuantumRegister(11)
-    solution = ClassicalRegister(4)
-    #solution = ClassicalRegister(6) # perm
+    aux = QuantumRegister(9)
+    solution = ClassicalRegister(4) # answer
     #solution = ClassicalRegister(2) # adder
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
-    #solution = ClassicalRegister(9) # store_one_board
+    #solution = ClassicalRegister(10) # store_asteroids
+    #solution = ClassicalRegister(12) # inner_grover 1, 2, 1 and 2
     #solution = ClassicalRegister(12) # oracle
-    qc = QuantumCircuit(address, data, perm, oracle, aux, solution)
+    qc = QuantumCircuit(address, data, shots, oracle, aux, solution)
 
     # answer -------------------------------------------------------------------
     # initialize
     qc.h(address)
-    # perm[i] = (|00> + |01> + |10>)/sqrt(3)
-    for i in range(3):
-        qc.ry(2.0 * math.asin(1.0 / math.sqrt(3)), perm[i*2])
-        qc.x(perm[i*2])
-        qc.ch(perm[i*2], perm[i*2+1])
-        qc.x(perm[i*2])
+    qc.h(shots)
     qc.x(oracle)
     qc.h(oracle)
 
     for i in range(1):
-        phase_oracle(qc, address, data, perm, oracle, aux, problem_set)
-        diffusion(qc, address, perm, aux)
+        outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
+        outer_diffusion(qc, address, data, aux)
 
-    qc.measure(address, solution)
-    # answer: addr == 10 (0b1010)
+    qc.measure([address[0], address[1], address[2], address[3]], solution)
 
-    # test perm ----------------------------------------------------------------
-    #for i in range(3):
-    #    qc.ry(2.0 * math.asin(1.0 / math.sqrt(3)), perm[i*2])
-    #    qc.ch(perm[i*2], perm[i*2+1])
-    #    qc.x(perm[i*2])
+    # test store_data ----------------------------------------------------------
+    #qc.h(address)
+    #qc.x([shots[0], shots[1], shots[4]])
+
+    #store_data(qc, address, data, shots, aux, problem_set)
+
+    #qc.measure(data, solution[0:6])
+    #qc.measure([address[3], address[2], address[1], address[0]], solution[6:10])
+
+    # test inner_grover_1 --------------------------------------------------------
+    #qc.h(address)
+    #qc.h(shots)
     #qc.x(oracle)
     #qc.h(oracle)
 
-    #create_perm(qc, perm, oracle[0], aux)
+    #inner_grover_1(qc, shots, oracle, aux)
 
-    #qc.measure(perm, solution)
+    #qc.measure(shots, solution[0:8])
+    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
-    # test adder3 --------------------------------------------------------------
-    #qc.h(aux[0:2])
-    #qc.x(aux[2])
-    #adder2(qc, aux[0:2], aux[2], aux[3])
-    #qc.measure(aux[0:2], solution[0:2])
+    # test inner_grover_2 --------------------------------------------------------
+    #qc.h(address)
+    #qc.h(shots)
+    #qc.x(oracle)
+    #qc.h(oracle)
 
-    # test is_count4 -----------------------------------------------------------
-    #qc.h(perm[0:4])
-    #is_count4(qc, perm[0:6], oracle[0], aux[0:4], aux[4:])
-    #qc.measure(perm[0:4], solution[0:4])
-    #qc.measure(oracle[0], solution[4])
+    #inner_grover_2(qc, address, data, shots, oracle, aux, problem_set)
 
-    # test inv_is_count4 -------------------------------------------------------
-    #qc.h(perm[0:4])
-    #is_count4(qc, perm[0:6], oracle[0], aux)
-    #inv_is_count4(qc, perm[0:6], oracle[0], aux)
-    #qc.measure(perm[0:4], solution[0:4])
-    #qc.measure(oracle[0], solution[4])
-
-    # test store_one_board -----------------------------------------------------
-    #qc.h(perm)
-    #qc.x(address)
-    #board = problem_set[0]
-    #store_one_board(qc, address, perm, oracle, aux, board)
-    #qc.measure(perm, solution[0:8])
-    #qc.measure(oracle, solution[8])
+    #qc.measure(shots, solution[0:8])
+    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     # test oracle --------------------------------------------------------------
-    #qc.h(perm)
     #qc.h(address)
+    #qc.h(shots)
     #qc.x(oracle)
     #qc.h(oracle)
 
-    #for i in range(2):
-    #    create_perm(qc, perm, oracle, aux)
-    #    store_one_board(qc, address, perm, oracle, aux, problem_set[10])
-    #    inv_create_perm(qc, perm, oracle, aux)
+    #for i in range(1):
+    #    outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
+    #    outer_diffusion(qc, address, shots, aux)
 
-    #    diffusion(qc, address, perm, aux)
-
-
-    #qc.h(oracle)
-    #qc.x(oracle)
-    ##qc.measure(perm, solution[0:8])
-    #qc.measure(address, solution[8:12])
+    ##qc.measure(shots, solution[0:8])
+    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     return qc
+
+
+# for test
+#qc = week3_ans_func(prob1)
+#
+#job = execute(qc, backend=backend, shots=1000, seed_simulator=12345, backend_options={"fusion_enable":True})
+#result = job.result()
+#count = result.get_counts()
+#
+#count
