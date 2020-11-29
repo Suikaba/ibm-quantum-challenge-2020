@@ -14,6 +14,18 @@ def rqor(qc, a, b, c):
     qc.x(a)
     qc.x(b)
 
+def rqor_dirty(qc, a, b, c):
+    qc.x(a)
+    qc.x(b)
+    qc.rccx(a, b, c)
+    qc.x(c)
+
+def inv_rqor_dirty(qc, a, b, c):
+    qc.x(c)
+    qc.rccx(a, b, c)
+    qc.x(b)
+    qc.x(a)
+
 
 def adder2(qc, s, x, c):
     qc.rccx(x, s[0], c)
@@ -21,10 +33,48 @@ def adder2(qc, s, x, c):
     qc.rccx(x, s[0], c)
     qc.cx(x, s[0])
 
+def adder2_ovf(qc, s, x, c, ovf):
+    qc.rccx(x, s[0], c)
+    qc.rccx(c, s[1], ovf)
+    qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
+    qc.cx(x, s[0])
+
+def adder2_dirty(qc, s, x, c):
+    qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    #qc.rccx(x, s[0], c)
+    qc.cx(x, s[0])
+
+def adder2_dirty_ovf(qc, s, x, c, ovf):
+    qc.rccx(x, s[0], c)
+    qc.rccx(c, s[1], ovf)
+    qc.cx(c, s[1])
+    qc.cx(x, s[0])
+
 def inv_adder2(qc, s, x, c):
     qc.cx(x, s[0])
     qc.rccx(x, s[0], c)
     qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
+
+def inv_adder2_ovf(qc, s, x, c, ovf):
+    qc.cx(x, s[0])
+    qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.rccx(c, s[1], ovf)
+    qc.rccx(x, s[0], c)
+
+def inv_adder2_dirty(qc, s, x, c):
+    qc.cx(x, s[0])
+    #qc.rccx(x, s[0], c)
+    qc.cx(c, s[1])
+    qc.rccx(x, s[0], c)
+
+def inv_adder2_dirty_ovf(qc, s, x, c, ovf):
+    qc.cx(x, s[0])
+    qc.cx(c, s[1])
+    qc.rccx(c, s[1], ovf)
     qc.rccx(x, s[0], c)
 
 
@@ -36,28 +86,72 @@ def inv_counter3(qc, shots, s, c):
     for i in reversed(range(7)):
         inv_adder2(qc, s, shots[i+1], c)
 
-def is_count3(qc, shots, out, aux):
-    assert len(aux) >= 6
+
+def is_count3_dirty(qc, shots, out, aux):
+    assert len(aux) >= 7
     s = [shots[0], aux[0]]
-    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
-    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
-    qc.x([aux[1], aux[2]])
-    qc.rccx(aux[1], aux[2], aux[3])
-    counter3(qc, shots, s, aux[4])
-    qc.mct([aux[3], s[0], s[1]], out, aux[5:])
-    inv_counter3(qc, shots, s, aux[4])
-    qc.rccx(aux[1], aux[2], aux[3])
-    qc.x([aux[1], aux[2]])
-    qc.mct(shots[4:8], aux[2], aux[3:], mode='basic')
-    qc.mct(shots[0:4], aux[1], aux[2:], mode='basic')
+    ovf = aux[1]
+    adder2(qc, s, shots[1], aux[2])
+    adder2(qc, s, shots[2], aux[2])
+    adder2_ovf(qc, s, shots[3], aux[2], ovf)
+    adder2_dirty_ovf(qc, s, shots[4], aux[2], ovf)
+    adder2_dirty_ovf(qc, s, shots[5], aux[3], ovf)
+    adder2_dirty_ovf(qc, s, shots[6], aux[4], ovf)
+    adder2_dirty_ovf(qc, s, shots[7], aux[5], ovf)
+    qc.x(ovf)
+    qc.mct([ovf, s[0], s[1]], out, aux[6], mode='basic')
+
+def inv_is_count3_dirty(qc, shots, out, aux):
+    assert len(aux) >= 7
+    s = [shots[0], aux[0]]
+    ovf = aux[1]
+    qc.mct([ovf, s[0], s[1]], out, aux[6], mode='basic')
+    qc.x(ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[7], aux[5], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[6], aux[4], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[5], aux[3], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[4], aux[2], ovf)
+    inv_adder2_ovf(qc, s, shots[3], aux[2], ovf)
+    inv_adder2(qc, s, shots[2], aux[2])
+    inv_adder2(qc, s, shots[1], aux[2])
 
 
-def store_asteroids(qc, addr_f, data, shots, aux, asteroids):
+def opt_is_count3(qc, shots, out, aux):
+    s = [shots[0], aux[0]]
+    ovf = aux[1]
+    adder2(qc, s, shots[1], aux[2])
+    adder2_dirty(qc, s, shots[2], aux[2])
+    # s[0] and s[1] となりつつ ovf に xor されるのは高々1回であるためこれでよい
+    adder2_dirty_ovf(qc, s, shots[3], aux[3], ovf)
+    adder2_dirty_ovf(qc, s, shots[4], aux[4], ovf)
+    adder2_dirty_ovf(qc, s, shots[5], aux[5], ovf)
+    adder2_dirty_ovf(qc, s, shots[6], aux[6], ovf)
+    adder2_dirty_ovf(qc, s, shots[7], aux[7], ovf)
+    qc.x(ovf)
+    qc.rccx(ovf, s[0], aux[8])
+    qc.ccx(aux[8], s[1], out)
+    qc.rccx(ovf, s[0], aux[8])
+    qc.x(ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[7], aux[7], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[6], aux[6], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[5], aux[5], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[4], aux[4], ovf)
+    inv_adder2_dirty_ovf(qc, s, shots[3], aux[3], ovf)
+    inv_adder2_dirty(qc, s, shots[2], aux[2])
+    inv_adder2(qc, s, shots[1], aux[2])
+
+
+def store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux, asteroids):
     for i in range(6):
         r, c = int(asteroids[i][0]), int(asteroids[i][1])
-        rqor(qc, shots[r], shots[4+c], aux)
-        qc.rccx(addr_f, aux, data[i])
-        rqor(qc, shots[r], shots[4+c], aux)
+        if r == 0 and c == 0:
+            qc.rccx(addr_f, cache_00, data[i])
+        elif r == 0 and c == 1:
+            qc.rccx(addr_f, cache_01, data[i])
+        else:
+            rqor_dirty(qc, shots[r], shots[4+c], aux)
+            qc.rccx(addr_f, aux, data[i])
+            inv_rqor_dirty(qc, shots[r], shots[4+c], aux)
 
 
 def store_data(qc, addr, data, shots, aux, problem_set):
@@ -65,6 +159,8 @@ def store_data(qc, addr, data, shots, aux, problem_set):
     cache_addr_hi = aux[4]
     addr_f = aux[5]
     aux_store = aux[6]
+    cache_00 = aux[7]
+    cache_01 = aux[8]
 
     qc.rccx(addr[2], addr[3], cache_addr_lo[0b11])
     qc.x(addr[2])
@@ -75,23 +171,26 @@ def store_data(qc, addr, data, shots, aux, problem_set):
     qc.rccx(addr[2], addr[3], cache_addr_lo[0b10])
     qc.x(addr[3])
 
+    rqor(qc, shots[0], shots[4], cache_00)
+    rqor(qc, shots[0], shots[5], cache_01)
+
 
     qc.rccx(addr[0], addr[1], cache_addr_hi)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1111])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1111])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1110])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1110])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1100])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1100])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1101])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1101])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
 
     qc.rccx(addr[0], addr[1], cache_addr_hi)
@@ -101,19 +200,19 @@ def store_data(qc, addr, data, shots, aux, problem_set):
     qc.rccx(addr[0], addr[1], cache_addr_hi)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1010])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1010])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1011])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1011])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1001])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1001])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b1000])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b1000])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
 
     qc.rccx(addr[0], addr[1], cache_addr_hi)
@@ -123,19 +222,19 @@ def store_data(qc, addr, data, shots, aux, problem_set):
     qc.rccx(addr[0], addr[1], cache_addr_hi)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0000])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0000])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0001])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0001])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0011])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0011])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0010])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0010])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
 
     qc.rccx(addr[0], addr[1], cache_addr_hi)
@@ -145,24 +244,27 @@ def store_data(qc, addr, data, shots, aux, problem_set):
     qc.rccx(addr[0], addr[1], cache_addr_hi)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0110])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0110])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b10], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0111])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0111])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b11], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0101])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0101])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b01], addr_f)
 
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
-    store_asteroids(qc, addr_f, data, shots, aux_store, problem_set[0b0100])
+    store_asteroids(qc, addr_f, data, shots, cache_00, cache_01, aux_store, problem_set[0b0100])
     qc.rccx(cache_addr_hi, cache_addr_lo[0b00], addr_f)
 
     qc.rccx(addr[0], addr[1], cache_addr_hi)
     qc.x(addr[0])
 
+
+    rqor(qc, shots[0], shots[5], cache_01)
+    rqor(qc, shots[0], shots[4], cache_00)
 
     qc.rccx(addr[2], addr[3], cache_addr_lo[0b11])
     qc.x(addr[2])
@@ -177,7 +279,7 @@ def store_data(qc, addr, data, shots, aux, problem_set):
 # 3発のやつだけとりあえず選んでおく
 # これだけなら qRAM いらんので比較的高速にできてうれしい
 def inner_phase_oracle_1(qc, shots, oracle, aux):
-    is_count3(qc, shots, oracle, aux)
+    opt_is_count3(qc, shots, oracle, aux)
 
 def inner_diffusion_1(qc, shots, aux):
     qc.h(shots)
@@ -203,27 +305,25 @@ def inv_inner_grover_1(qc, shots, oracle, aux):
 def inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set):
     inner_grover_1(qc, shots, oracle, aux)
     store_data(qc, addr, data, shots, aux, problem_set)
-    is_count3(qc, shots, aux[0], aux[1:]) # ここ uncomputation しなくてもいいので最適化可能
-    qc.mct(data, aux[2], aux[3:], mode='basic')
+    qc.mct(data, aux[0], aux[1:], mode='basic')
+    is_count3_dirty(qc, shots, aux[1], aux[2:])
 
-    qc.ccx(aux[0], aux[2], oracle)
+    qc.ccx(aux[0], aux[1], oracle)
 
-    qc.mct(data, aux[2], aux[3:], mode='basic')
-    is_count3(qc, shots, aux[0], aux[1:])
+    inv_is_count3_dirty(qc, shots, aux[1], aux[2:])
+    qc.mct(data, aux[0], aux[1:], mode='basic')
     store_data(qc, addr, data, shots, aux, problem_set)
     inv_inner_grover_1(qc, shots, oracle, aux)
 
 
 def inner_diffusion_2(qc, addr, shots, aux):
-    #tmp = addr[:]
-    tmp = shots[:]
-    qc.h(tmp)
-    qc.x(tmp)
-    qc.h(tmp[7])
-    qc.mct(tmp[0:7], tmp[7], aux, mode='basic')
-    qc.h(tmp[7])
-    qc.x(tmp)
-    qc.h(tmp)
+    qc.h(shots)
+    qc.x(shots)
+    qc.h(shots[7])
+    qc.mct(shots[0:7], shots[7], aux, mode='basic')
+    qc.h(shots[7])
+    qc.x(shots)
+    qc.h(shots)
 
 inner_cnt_2 = 4 # must >= 4
 def inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
@@ -240,20 +340,18 @@ def inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
 def outer_phase_oracle(qc, addr, data, shots, oracle, aux, problem_set):
     inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
 
-    is_count3(qc, shots, oracle, aux)
+    opt_is_count3(qc, shots, oracle, aux)
 
     inv_inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set)
 
 def outer_diffusion(qc, addr, shots, aux):
-    tmp = addr[:]
-    #tmp = shots[:]
-    qc.h(tmp)
-    qc.x(tmp)
-    qc.h(tmp[3])
-    qc.mct(tmp[0:3], tmp[3], aux, mode='basic')
-    qc.h(tmp[3])
-    qc.x(tmp)
-    qc.h(tmp)
+    qc.h(addr)
+    qc.x(addr)
+    qc.h(addr[3])
+    qc.mct(addr[0:3], addr[3], aux, mode='basic')
+    qc.h(addr[3])
+    qc.x(addr)
+    qc.h(addr)
 
 
 # pretest
@@ -354,7 +452,6 @@ def week3_ans_func(problem_set):
     #inner_grover_1(qc, shots, oracle, aux)
 
     #qc.measure(shots, solution[0:8])
-    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     # test inner_grover_2 --------------------------------------------------------
     #qc.h(address)
@@ -372,7 +469,7 @@ def week3_ans_func(problem_set):
 
 
 # for test
-#qc = week3_ans_func(prob2)
+#qc = week3_ans_func(prob3)
 #
 #job = execute(qc, backend=backend, shots=1000, seed_simulator=12345, backend_options={"fusion_enable":True})
 #result = job.result()
