@@ -225,7 +225,7 @@ def inner_diffusion_2(qc, addr, shots, aux):
     qc.x(tmp)
     qc.h(tmp)
 
-inner_cnt_2 = 3
+inner_cnt_2 = 4 # must >= 4
 def inner_grover_2(qc, addr, data, shots, oracle, aux, problem_set):
     for i in range(inner_cnt_2):
         inner_phase_oracle_2(qc, addr, data, shots, oracle, aux, problem_set)
@@ -321,7 +321,6 @@ def week3_ans_func(problem_set):
     #solution = ClassicalRegister(5) # is_count4, inv_is_count4
     #solution = ClassicalRegister(10) # store_asteroids
     #solution = ClassicalRegister(12) # inner_grover 1, 2, 1 and 2
-    #solution = ClassicalRegister(12) # oracle
     qc = QuantumCircuit(address, data, shots, oracle, aux, solution)
 
     # answer -------------------------------------------------------------------
@@ -368,24 +367,12 @@ def week3_ans_func(problem_set):
     #qc.measure(shots, solution[0:8])
     #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
-    # test oracle --------------------------------------------------------------
-    #qc.h(address)
-    #qc.h(shots)
-    #qc.x(oracle)
-    #qc.h(oracle)
-
-    #for i in range(1):
-    #    outer_phase_oracle(qc, address, data, shots, oracle, aux, problem_set)
-    #    outer_diffusion(qc, address, shots, aux)
-
-    ##qc.measure(shots, solution[0:8])
-    #qc.measure([address[3], address[2], address[1], address[0]], solution[8:12])
 
     return qc
 
 
 # for test
-#qc = week3_ans_func(prob1)
+#qc = week3_ans_func(prob2)
 #
 #job = execute(qc, backend=backend, shots=1000, seed_simulator=12345, backend_options={"fusion_enable":True})
 #result = job.result()
